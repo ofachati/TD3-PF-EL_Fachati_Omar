@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.stream.Collectors;
 
 import paires.Paire;
 
@@ -24,20 +25,29 @@ public class Commande {
         return lignes;
     }
 
+    private static final Function<Paire<Produit, Integer>, String> formateurLigne = l-> String.format("%s %d",  l.fst(), l.snd());
     @Override
     public String toString() {
+
+        return lignes.stream()
+                .map(l -> formateurLigne.apply(l))
+                .collect(Collectors.joining());
+        /*
         StringBuilder str = new StringBuilder();
         str.append("Commande\n");
         for (Paire<Produit, Integer> ligne : lignes) {
             str.append(String.format("%s x%d\n", ligne.fst(), ligne.snd()));
         }
         return str.toString();
+
+         */
     }
 
     /**
      * cumule les lignes en fonction des produits
      */
     public Commande normaliser() {
+
         Map<Produit, Integer> lignesCumulees = new HashMap<>();
         for (Paire<Produit, Integer> ligne : lignes) {
             Produit p = ligne.fst();
@@ -56,11 +66,17 @@ public class Commande {
     }
 
     public Double cout(Function<Paire<Produit, Integer>, Double> calculLigne) {
-        double rtr = 0;
+
+        return lignes.stream()
+                .map(l -> calculLigne.apply(l))
+                .reduce(0.0, (a,b) -> a + b) ;
+        /* double rtr = 0;
         for (Paire<Produit, Integer> l : normaliser().lignes) {
             rtr += calculLigne.apply(l);
         }
         return rtr;
+
+        */
     }
 
     public String affiche(Function<Paire<Produit, Integer>, Double> calculLigne) {
