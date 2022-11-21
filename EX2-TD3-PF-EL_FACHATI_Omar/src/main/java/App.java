@@ -7,8 +7,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import universite.Annee;
 import universite.Etudiant;
@@ -183,6 +186,92 @@ public class App {
         });
     }
 
+
+
+
+
+
+
+    // matières d'une année
+    public static final Function<Annee, Stream<Matiere>> matieresA = a -> a.ues().stream()
+            .flatMap(ue -> ue.ects().keySet().stream());
+
+    // matières d'un étudiant
+    public static final Function<Etudiant, Stream<Matiere>> matieresE = e -> matieresA.apply(e.annee());
+
+    // matières coefficientées d'un étudiant (version Entry)
+    public static final Function<Etudiant, Stream<Entry<Matiere, Integer>>> matieresCoefE_ = e -> e.annee().ues()
+            .stream().flatMap(ue -> ue.ects().entrySet().stream());
+
+    // transformation d'une Entry en une Paire
+    public static final Function<Entry<Matiere, Integer>, Paire<Matiere, Integer>> entry2paire = e -> new Paire<>(
+            e.getKey(), e.getValue());
+
+    // matières coefficientées d'un étudiant (version Paire)
+    public static final Function<Etudiant, Stream<Paire<Matiere, Integer>>> matieresCoefE = e -> matieresCoefE_.apply(e)
+            .map(entry2paire);
+
+    // accumulateur pour calcul de la moyenne
+    // ((asomme, acoefs), (note, coef)) -> (asomme+note*coef, acoef+coef)
+
+   public static final BinaryOperator<Paire<Double, Integer>> accumulateurMoyenne = null;
+   // zero (valeur initiale pour l'accumulateur)
+   public static final Paire<Double, Integer> zero = new Paire<>(0.0, 0);
+    // obtention de la liste de (note, coef) pour les matières d'un étudiant
+    // 1. obtenir les (matière, coef)s
+    // 2. mapper pour obtenir les (note, coef)s, null pour la note si l'étudiant estDEF dans cette matière
+    public static final Function<Etudiant, List<Paire<Double, Integer>>> notesPonderees = e -> matieresCoefE.apply(e).map(p -> new Paire<>(e.notes().get(p.fst()), p.snd())).collect(Collectors.toList());
+    // obtention de la liste de (note, coef) pour les matières d'un étudiant
+    // 1. obtenir les (matière, coef)s
+    // 2. mapper pour obtenir les (note, coef)s, 0.0 pour la note si l'étudiant est DEF dans cette matière
+    public static final Function<Etudiant, List<Paire<Double, Integer>>> notesPondereesIndicatives = e -> matieresCoefE
+            .apply(e).map(p -> new Paire<>((e.notes().containsKey(p.fst())) ? (e.notes().get(p.fst())) : 0.0, p.snd()))
+            .collect(Collectors.toList());
+    // replie avec l'accumulateur spécifique
+    public static final Function<List<Paire<Double, Integer>>, Paire<Double, Integer>> reduit = ps -> ps.stream()
+            .reduce(zero, accumulateurMoyenne);
+    // calcule la moyenne à partir d'un couple (somme pondérée, somme coefs)
+    public static final Function<Paire<Double, Integer>, Double> divise = null;
+    // calcul de moyenne fonctionnel
+    // composer notesPonderees, reduit et divise
+    // exception en cas de matière DEF
+    public static final Function<Etudiant, Double> computeMoyenne = notesPonderees.andThen(reduit).andThen(divise);
+    // calcul de moyenne fonctionnel
+    // composer notesPondereesIndicatives, reduit et divise
+    // pas d'exception en cas de matière DEF
+    public static final Function<Etudiant, Double> computeMoyenneIndicative = notesPondereesIndicatives.andThen(reduit).andThen(divise);
+    // calcul de moyenne
+    public static final Function<Etudiant, Double> moyenne = e -> (e == null || aDEF.test(e)) ? null: computeMoyenne.apply(e);
+    // calcul de moyenne indicative
+    public static final Function<Etudiant, Double> moyenneIndicative = e -> {
+        int credits = 0;
+        double somme = 0.0;
+        // on verra avec Streams plus tard
+        for (UE ue : e.annee().ues()) {
+            for (Entry<Matiere, Integer> ects : ue.ects().entrySet()) {
+                credits += ects.getValue();
+                double note;
+                if (e.notes().containsKey(ects.getKey()))
+                    note = e.notes().get(ects.getKey());
+                else
+                    note = 0.0;
+                somme += ects.getValue() * note;
+            }
+        }
+        return somme / credits;
+    };
+
+
+
+
+
+
+
+    // accumulateur pour calcul de la moyenne
+    // ((asomme, acoefs), (note, coef)) -> (asomme+note*coef, acoef+coef)
+    public static final Predicate<Etudiant> aDEF = e -> matieresE.apply(e).anyMatch(m -> !e.notes().containsKey(m));
+
+
     // on reecrira plus tard avec les Streams
     public static final Predicate<Etudiant> aDEF = e -> {
         for (UE ue : e.annee().ues()) {
@@ -223,23 +312,6 @@ public class App {
         return somme / credits;
     };
 
-    public static final Function<Etudiant, Double> moyenneIndicative = e -> {
-        int credits = 0;
-        double somme = 0.0;
-        // on verra avec Streams plus tard
-        for (UE ue : e.annee().ues()) {
-            for (Entry<Matiere, Integer> ects : ue.ects().entrySet()) {
-                credits += ects.getValue();
-                double note;
-                if (e.notes().containsKey(ects.getKey()))
-                    note = e.notes().get(ects.getKey());
-                else
-                    note = 0.0;
-                somme += ects.getValue() * note;
-            }
-        }
-        return somme / credits;
-    };
 
     // plante si moyenne ne peut pas être calculée (on réécrira plus tard)
     public static final Predicate<Etudiant> naPasLaMoyennev1 = e -> moyenne.apply(e) < 10.0;
